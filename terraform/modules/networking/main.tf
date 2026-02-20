@@ -95,6 +95,45 @@ resource "azurerm_network_security_group" "aks" {
     destination_address_prefix = "*"
   }
 
+  # Allow intra-VNet traffic (required for kubelet, kube-proxy, pod-to-pod)
+  security_rule {
+    name                       = "AllowVNetInbound"
+    priority                   = 200
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "VirtualNetwork"
+    destination_address_prefix = "*"
+  }
+
+  # Allow Azure Load Balancer health probes
+  security_rule {
+    name                       = "AllowAzureLoadBalancer"
+    priority                   = 250
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "AzureLoadBalancer"
+    destination_address_prefix = "*"
+  }
+
+  # Allow HTTP inbound from Internet (LoadBalancer service)
+  security_rule {
+    name                       = "AllowHTTPInbound"
+    priority                   = 300
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "80"
+    source_address_prefix      = "Internet"
+    destination_address_prefix = "*"
+  }
+
   # Deny all other inbound
   security_rule {
     name                       = "DenyAllInbound"

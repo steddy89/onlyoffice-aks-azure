@@ -205,6 +205,12 @@ networkPolicy:
       ports:
         - port: 8000
           protocol: TCP
+    - from:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - port: 8000
+          protocol: TCP
 
 # ---- Priority Class ----
 priorityClassName: "high-priority"
