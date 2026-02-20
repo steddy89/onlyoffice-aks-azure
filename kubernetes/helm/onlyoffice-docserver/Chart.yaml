@@ -1,0 +1,17 @@
+apiVersion: v2
+name: onlyoffice-docserver
+description: ONLYOFFICE Document Server Helm chart for Azure AKS
+type: application
+version: 1.0.0
+appVersion: "8.1"
+home: https://github.com/example/onlyoffice-aks-azure
+maintainers:
+  - name: Platform Team
+    email: platform-team@example.com
+keywords:
+  - onlyoffice
+  - document-server
+  - office
+  - collaboration
+  - azure
+  - aks

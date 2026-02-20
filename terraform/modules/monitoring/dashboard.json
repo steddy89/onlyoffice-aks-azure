@@ -1,0 +1,32 @@
+{
+  "lpiVersion": "1",
+  "lenses": {
+    "0": {
+      "id": "onlyoffice-overview",
+      "name": "ONLYOFFICE Document Server Overview",
+      "metadata": {
+        "type": "Blade",
+        "inputs": [],
+        "settings": {
+          "content": {
+            "settings": {
+              "title": "ONLYOFFICE Document Server - Production Dashboard"
+            }
+          }
+        }
+      }
+    }
+  },
+  "metadata": {
+    "model": {
+      "timeRange": {
+        "value": {
+          "relative": {
+            "duration": 24,
+            "timeUnit": 1
+          }
+        }
+      }
+    }
+  }
+}

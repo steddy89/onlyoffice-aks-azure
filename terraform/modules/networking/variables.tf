@@ -1,0 +1,22 @@
+variable "resource_group_name" { type = string }
+variable "location" { type = string }
+variable "suffix" { type = string }
+variable "environment" { type = string }
+variable "vnet_address_space" { type = list(string) }
+variable "aks_subnet_prefix" { type = string }
+variable "db_subnet_prefix" { type = string }
+variable "redis_subnet_prefix" { type = string }
+variable "appgw_subnet_prefix" { type = string }
+variable "private_endpoint_subnet" { type = string }
+variable "tags" { type = map(string) }
+
+output "vnet_id" { value = azurerm_virtual_network.main.id }
+output "aks_subnet_id" { value = azurerm_subnet.aks.id }
+output "db_subnet_id" { value = azurerm_subnet.db.id }
+output "redis_subnet_id" { value = azurerm_subnet.redis.id }
+output "appgw_subnet_id" { value = azurerm_subnet.appgw.id }
+output "private_endpoint_subnet_id" { value = azurerm_subnet.private_endpoints.id }
+output "postgresql_dns_zone_id" { value = azurerm_private_dns_zone.postgresql.id }
+output "keyvault_dns_zone_id" { value = azurerm_private_dns_zone.keyvault.id }
+output "acr_dns_zone_id" { value = azurerm_private_dns_zone.acr.id }
+output "blob_dns_zone_id" { value = azurerm_private_dns_zone.blob.id }

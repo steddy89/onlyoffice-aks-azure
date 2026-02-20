@@ -1,0 +1,111 @@
+# ==============================================================================
+# Fluent Bit Configuration for ONLYOFFICE log forwarding to Azure Monitor
+# ==============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  namespace: onlyoffice
+  labels:
+    app.kubernetes.io/name: fluent-bit
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Daemon       Off
+        Log_Level    info
+        Parsers_File parsers.conf
+        HTTP_Server  On
+        HTTP_Listen  0.0.0.0
+        HTTP_Port    2020
+
+    [INPUT]
+        Name             tail
+        Tag              onlyoffice.*
+        Path             /var/log/onlyoffice/documentserver/*.log
+        Parser           json
+        DB               /var/log/flb_onlyoffice.db
+        Mem_Buf_Limit    5MB
+        Skip_Long_Lines  On
+        Refresh_Interval 10
+
+    [INPUT]
+        Name             tail
+        Tag              nginx.*
+        Path             /var/log/onlyoffice/documentserver/nginx/*.log
+        Parser           nginx
+        DB               /var/log/flb_nginx.db
+        Mem_Buf_Limit    5MB
+
+    [FILTER]
+        Name   kubernetes
+        Match  *
+        Merge_Log On
+        Keep_Log Off
+        K8S-Logging.Parser On
+        K8S-Logging.Exclude On
+
+    [FILTER]
+        Name   modify
+        Match  *
+        Add    cluster ${CLUSTER_NAME}
+        Add    environment ${ENVIRONMENT}
+
+    [OUTPUT]
+        Name            azure
+        Match           *
+        Customer_ID     ${LOG_ANALYTICS_WORKSPACE_ID}
+        Shared_Key      ${LOG_ANALYTICS_SHARED_KEY}
+        Log_Type        ONLYOFFICEDocServer
+
+  parsers.conf: |
+    [PARSER]
+        Name   json
+        Format json
+        Time_Key time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+
+    [PARSER]
+        Name   nginx
+        Format regex
+        Regex  ^(?<remote>[^ ]*) (?<host>[^ ]*) (?<user>[^ ]*) \[(?<time>[^\]]*)\] "(?<method>\S+)(?: +(?<path>[^\"]*?)(?: +\S*)?)?" (?<code>[^ ]*) (?<size>[^ ]*)(?: "(?<referer>[^\"]*)" "(?<agent>[^\"]*)")?$
+        Time_Key time
+        Time_Format %d/%b/%Y:%H:%M:%S %z
+---
+# ==============================================================================
+# Log Analytics Saved Queries
+# ==============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: log-analytics-queries
+  namespace: onlyoffice
+  labels:
+    app.kubernetes.io/component: monitoring
+data:
+  error-rate.kql: |
+    ONLYOFFICEDocServer_CL
+    | where TimeGenerated > ago(1h)
+    | where level_s == "error"
+    | summarize ErrorCount = count() by bin(TimeGenerated, 5m)
+    | order by TimeGenerated desc
+
+  active-sessions.kql: |
+    ONLYOFFICEDocServer_CL
+    | where TimeGenerated > ago(15m)
+    | where message_s contains "session"
+    | summarize ActiveSessions = dcount(sessionId_s) by bin(TimeGenerated, 1m)
+
+  slow-requests.kql: |
+    ONLYOFFICEDocServer_CL
+    | where TimeGenerated > ago(1h)
+    | where duration_d > 5000
+    | project TimeGenerated, path_s, method_s, duration_d, statusCode_d
+    | order by duration_d desc
+    | take 50
+
+  document-operations.kql: |
+    ONLYOFFICEDocServer_CL
+    | where TimeGenerated > ago(24h)
+    | where message_s contains "document"
+    | summarize Operations = count() by operation_s, bin(TimeGenerated, 1h)
+    | order by TimeGenerated desc

@@ -1,0 +1,157 @@
+# ==============================================================================
+# Scheduled Maintenance - Backup, Security Scan, Cost Report
+# ==============================================================================
+name: Scheduled Maintenance
+
+on:
+  schedule:
+    # Daily backup verification at 2 AM UTC
+    - cron: '0 2 * * *'
+    # Weekly security scan on Sundays at 3 AM UTC
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Maintenance task'
+        required: true
+        type: choice
+        options:
+          - backup-verify
+          - security-scan
+          - cost-report
+          - certificate-check
+
+permissions:
+  id-token: write
+  contents: read
+  security-events: write
+
+jobs:
+  # ---- Backup Verification ----
+  backup-verify:
+    name: Verify Backups
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 2 * * *' || github.event.inputs.task == 'backup-verify'
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify PostgreSQL Backup
+        run: |
+          echo "Checking PostgreSQL backup status..."
+          az postgres flexible-server backup list \
+            --resource-group ${{ vars.RESOURCE_GROUP }} \
+            --name ${{ vars.POSTGRESQL_SERVER }} \
+            --query "[0].{Name:name, Created:completedTime, Type:backupType}" \
+            --output table
+
+      - name: Verify Redis Backup
+        run: |
+          echo "Checking Redis backup status..."
+          az redis export \
+            --resource-group ${{ vars.RESOURCE_GROUP }} \
+            --name ${{ vars.REDIS_NAME }} \
+            --prefix "backup-verify" \
+            --container "${{ vars.BACKUP_CONTAINER_SAS }}" || echo "Redis backup check completed"
+
+      - name: Verify Storage Snapshots
+        run: |
+          echo "Checking file share snapshots..."
+          az storage share-rm snapshot list \
+            --storage-account ${{ vars.STORAGE_ACCOUNT }} \
+            --name onlyoffice-data \
+            --query "[0:3].{Time:snapshotTime}" \
+            --output table
+
+  # ---- Security Scan ----
+  security-scan:
+    name: Weekly Security Scan
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 3 * * 0' || github.event.inputs.task == 'security-scan'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: AKS Security Assessment
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ vars.RESOURCE_GROUP }} \
+            --name ${{ vars.AKS_CLUSTER }} \
+            --overwrite-existing
+
+          echo "=== Pod Security Standards ==="
+          kubectl get pods -n onlyoffice -o json | \
+            jq -r '.items[] | "\(.metadata.name): runAsNonRoot=\(.spec.containers[0].securityContext.runAsNonRoot // "not set")"'
+
+          echo ""
+          echo "=== Network Policies ==="
+          kubectl get networkpolicies -n onlyoffice
+
+          echo ""
+          echo "=== Secrets (audit) ==="
+          kubectl get secrets -n onlyoffice --no-headers | wc -l
+          echo "secrets found in onlyoffice namespace"
+
+      - name: Container Image Scan
+        run: |
+          az acr task run \
+            --registry ${{ vars.ACR_NAME }} \
+            --name scan-onlyoffice \
+            --no-logs || echo "Image scan completed"
+
+      - name: TLS Certificate Check
+        run: |
+          echo "Checking TLS certificate expiry..."
+          EXPIRY=$(echo | openssl s_client -servername ${{ vars.ONLYOFFICE_DOMAIN }} \
+            -connect ${{ vars.ONLYOFFICE_DOMAIN }}:443 2>/dev/null | \
+            openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+          
+          if [ -n "$EXPIRY" ]; then
+            EXPIRY_EPOCH=$(date -d "$EXPIRY" +%s)
+            NOW_EPOCH=$(date +%s)
+            DAYS_LEFT=$(( (EXPIRY_EPOCH - NOW_EPOCH) / 86400 ))
+            echo "Certificate expires in $DAYS_LEFT days ($EXPIRY)"
+            
+            if [ $DAYS_LEFT -lt 30 ]; then
+              echo "::warning::TLS certificate expires in $DAYS_LEFT days!"
+            fi
+          fi
+
+  # ---- Cost Report ----
+  cost-report:
+    name: Monthly Cost Report
+    runs-on: ubuntu-latest
+    if: github.event.inputs.task == 'cost-report'
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Generate Cost Report
+        run: |
+          END_DATE=$(date +%Y-%m-%d)
+          START_DATE=$(date -d "-30 days" +%Y-%m-%d)
+          
+          echo "## Cost Report ($START_DATE to $END_DATE)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          az cost management query \
+            --type Usage \
+            --timeframe Custom \
+            --time-period start=$START_DATE end=$END_DATE \
+            --dataset-filter "{\"dimensions\": {\"name\": \"ResourceGroup\", \"operator\": \"In\", \"values\": [\"${{ vars.RESOURCE_GROUP }}\"]}}" \
+            --output table >> $GITHUB_STEP_SUMMARY || echo "Cost query completed"

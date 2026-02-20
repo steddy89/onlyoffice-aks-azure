@@ -1,0 +1,216 @@
+# ==============================================================================
+# ONLYOFFICE Document Server - Helm Values
+# Production-ready configuration for Azure AKS
+# ==============================================================================
+
+# ---- Replica Configuration ----
+replicaCount: 3
+
+# ---- Image Configuration ----
+image:
+  repository: onlyoffice/documentserver
+  tag: "8.1"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# ---- Service Account ----
+serviceAccount:
+  create: true
+  annotations:
+    azure.workload.identity/client-id: ""
+  name: "onlyoffice-docserver"
+
+# ---- Pod Security ----
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: false  # ONLYOFFICE requires root for some operations
+  fsGroup: 101
+
+securityContext:
+  capabilities:
+    drop:
+      - NET_RAW
+  readOnlyRootFilesystem: false
+
+# ---- Service ----
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+  annotations: {}
+
+# ---- Ingress (AGIC) ----
+ingress:
+  enabled: true
+  className: "azure-application-gateway"
+  annotations:
+    appgw.ingress.kubernetes.io/ssl-redirect: "true"
+    appgw.ingress.kubernetes.io/use-private-ip: "false"
+    appgw.ingress.kubernetes.io/backend-protocol: "http"
+    appgw.ingress.kubernetes.io/health-probe-path: "/healthcheck"
+    appgw.ingress.kubernetes.io/request-timeout: "300"
+    appgw.ingress.kubernetes.io/connection-draining: "true"
+    appgw.ingress.kubernetes.io/connection-draining-timeout: "30"
+    appgw.ingress.kubernetes.io/cookie-based-affinity: "true"
+    appgw.ingress.kubernetes.io/backend-hostname: ""
+  hosts:
+    - host: docs.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: onlyoffice-tls
+      hosts:
+        - docs.example.com
+
+# ---- Resources ----
+resources:
+  requests:
+    cpu: "1000m"
+    memory: "2Gi"
+  limits:
+    cpu: "4000m"
+    memory: "8Gi"
+
+# ---- Autoscaling ----
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 15
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 300
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+
+# ---- Node Selection ----
+nodeSelector:
+  nodepool: onlyoffice
+
+tolerations:
+  - key: "workload"
+    operator: "Equal"
+    value: "onlyoffice"
+    effect: "NoSchedule"
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - onlyoffice-docserver
+          topologyKey: topology.kubernetes.io/zone
+
+# ---- Topology Spread ----
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: onlyoffice-docserver
+
+# ---- Probes ----
+livenessProbe:
+  httpGet:
+    path: /healthcheck
+    port: 8000
+  initialDelaySeconds: 120
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 5
+
+readinessProbe:
+  httpGet:
+    path: /healthcheck
+    port: 8000
+  initialDelaySeconds: 60
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /healthcheck
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 30
+
+# ---- Environment Variables ----
+env:
+  JWT_ENABLED: "true"
+  JWT_SECRET: ""
+  JWT_HEADER: "Authorization"
+  JWT_IN_BODY: "true"
+  WOPI_ENABLED: "true"
+  ALLOW_META_IP_ADDRESS: ""
+  ALLOW_PRIVATE_IP_ADDRESS: "true"
+
+# ---- Database Configuration (from secrets) ----
+database:
+  existingSecret: "onlyoffice-db-credentials"
+
+# ---- Redis Configuration (from secrets) ----
+redis:
+  existingSecret: "onlyoffice-redis-credentials"
+
+# ---- Persistence ----
+persistence:
+  data:
+    enabled: true
+    existingClaim: "onlyoffice-data"
+    mountPath: /var/lib/onlyoffice
+  logs:
+    enabled: true
+    existingClaim: "onlyoffice-logs"
+    mountPath: /var/log/onlyoffice
+
+# ---- Pod Disruption Budget ----
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# ---- Network Policy ----
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - podSelector: {}
+      ports:
+        - port: 8000
+          protocol: TCP
+
+# ---- Priority Class ----
+priorityClassName: "high-priority"
+
+# ---- Extra Configuration ----
+extraVolumes: []
+extraVolumeMounts: []
+extraContainers: []
+extraInitContainers: []

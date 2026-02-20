@@ -1,0 +1,182 @@
+# ==============================================================================
+# Prometheus ServiceMonitor for ONLYOFFICE
+# ==============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: onlyoffice-docserver
+  namespace: onlyoffice
+  labels:
+    app.kubernetes.io/name: onlyoffice-docserver
+    app.kubernetes.io/component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: onlyoffice-docserver
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+---
+# ==============================================================================
+# Grafana Dashboard ConfigMap
+# ==============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: onlyoffice-grafana-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "true"
+data:
+  onlyoffice-dashboard.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "liveNow": false,
+      "panels": [
+        {
+          "title": "ONLYOFFICE Pod CPU Usage",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"onlyoffice\"}[5m])) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+        },
+        {
+          "title": "ONLYOFFICE Pod Memory Usage",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "sum(container_memory_working_set_bytes{namespace=\"onlyoffice\"}) by (pod) / 1024 / 1024",
+              "legendFormat": "{{pod}} (MiB)"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+        },
+        {
+          "title": "HTTP Request Rate",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "sum(rate(nginx_http_requests_total{namespace=\"onlyoffice\"}[5m])) by (status)",
+              "legendFormat": "HTTP {{status}}"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+        },
+        {
+          "title": "Active Connections",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "sum(nginx_connections_active{namespace=\"onlyoffice\"})",
+              "legendFormat": "Active"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+        },
+        {
+          "title": "Pod Restart Count",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "sum(kube_pod_container_status_restarts_total{namespace=\"onlyoffice\"})",
+              "legendFormat": "Restarts"
+            }
+          ],
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 16 }
+        },
+        {
+          "title": "Ready Pods",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "sum(kube_pod_status_ready{namespace=\"onlyoffice\", condition=\"true\"})",
+              "legendFormat": "Ready"
+            }
+          ],
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 16 }
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 38,
+      "tags": ["onlyoffice", "aks", "azure"],
+      "templating": { "list": [] },
+      "time": { "from": "now-6h", "to": "now" },
+      "title": "ONLYOFFICE Document Server",
+      "uid": "onlyoffice-aks"
+    }
+---
+# ==============================================================================
+# PrometheusRule for ONLYOFFICE Alerts
+# ==============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: onlyoffice-alerts
+  namespace: onlyoffice
+  labels:
+    app.kubernetes.io/name: onlyoffice-docserver
+spec:
+  groups:
+    - name: onlyoffice.rules
+      rules:
+        - alert: ONLYOFFICEPodNotReady
+          expr: kube_pod_status_ready{namespace="onlyoffice", condition="true"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "ONLYOFFICE pod {{ $labels.pod }} is not ready"
+            description: "Pod {{ $labels.pod }} has been in a non-ready state for more than 5 minutes."
+
+        - alert: ONLYOFFICEHighCPU
+          expr: sum(rate(container_cpu_usage_seconds_total{namespace="onlyoffice"}[5m])) by (pod) > 3.5
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High CPU usage on ONLYOFFICE pod {{ $labels.pod }}"
+            description: "CPU usage is above 3.5 cores for pod {{ $labels.pod }}."
+
+        - alert: ONLYOFFICEHighMemory
+          expr: sum(container_memory_working_set_bytes{namespace="onlyoffice"}) by (pod) > 7e+9
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High memory usage on ONLYOFFICE pod {{ $labels.pod }}"
+            description: "Memory usage exceeds 7GB for pod {{ $labels.pod }}."
+
+        - alert: ONLYOFFICEFrequentRestarts
+          expr: increase(kube_pod_container_status_restarts_total{namespace="onlyoffice"}[1h]) > 3
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: "ONLYOFFICE container restarting frequently"
+            description: "Container {{ $labels.container }} in pod {{ $labels.pod }} has restarted more than 3 times in the last hour."
+
+        - alert: ONLYOFFICEHealthCheckFailing
+          expr: probe_success{job="onlyoffice-healthcheck"} == 0
+          for: 3m
+          labels:
+            severity: critical
+          annotations:
+            summary: "ONLYOFFICE health check failing"
+            description: "The ONLYOFFICE Document Server health check endpoint is not responding."
