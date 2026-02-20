@@ -3,7 +3,7 @@
 # ==============================================================================
 
 resource "azurerm_key_vault" "main" {
-  name                = "kv-${var.suffix}-${var.unique_suffix}"
+  name                = "kv-oo-${var.unique_suffix}"
   location            = var.location
   resource_group_name = var.resource_group_name
   tenant_id           = var.tenant_id
@@ -17,9 +17,9 @@ resource "azurerm_key_vault" "main" {
   soft_delete_retention_days      = 90
   enable_rbac_authorization       = true
 
-  # Network rules
+  # Network rules - Allow during initial deployment, restrict after
   network_acls {
-    default_action = "Deny"
+    default_action = "Allow"
     bypass         = "AzureServices"
   }
 
@@ -49,24 +49,10 @@ resource "azurerm_private_endpoint" "keyvault" {
 
   private_dns_zone_group {
     name                 = "kv-dns"
-    private_dns_zone_ids = [azurerm_private_dns_zone.keyvault.id]
+    private_dns_zone_ids = [var.keyvault_dns_zone_id]
   }
 
   tags = var.tags
-}
-
-resource "azurerm_private_dns_zone" "keyvault" {
-  name                = "privatelink.vaultcore.azure.net"
-  resource_group_name = var.resource_group_name
-  tags                = var.tags
-}
-
-resource "azurerm_private_dns_zone_virtual_network_link" "keyvault" {
-  name                  = "kv-vnet-link"
-  resource_group_name   = var.resource_group_name
-  private_dns_zone_name = azurerm_private_dns_zone.keyvault.name
-  virtual_network_id    = var.private_dns_zone_vnet_id
-  registration_enabled  = false
 }
 
 # ---- Generate JWT Secret for ONLYOFFICE ----
@@ -90,6 +76,7 @@ resource "azurerm_key_vault_secret" "jwt_secret" {
 resource "azurerm_monitor_diagnostic_setting" "keyvault" {
   name                       = "diag-kv-${var.suffix}"
   target_resource_id         = azurerm_key_vault.main.id
+  log_analytics_workspace_id = var.log_analytics_workspace_id
 
   enabled_log {
     category = "AuditEvent"

@@ -1,16 +1,53 @@
 {
-  "lpiVersion": "1",
   "lenses": {
     "0": {
-      "id": "onlyoffice-overview",
-      "name": "ONLYOFFICE Document Server Overview",
-      "metadata": {
-        "type": "Blade",
-        "inputs": [],
-        "settings": {
-          "content": {
+      "order": 0,
+      "parts": {
+        "0": {
+          "position": {
+            "x": 0,
+            "y": 0,
+            "colSpan": 6,
+            "rowSpan": 4
+          },
+          "metadata": {
+            "type": "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart",
+            "inputs": [
+              {
+                "name": "resourceTypeMode",
+                "value": "workspace"
+              },
+              {
+                "name": "ComponentId",
+                "value": "/subscriptions/${subscription_id}/resourceGroups/${resource_group}/providers/Microsoft.OperationalInsights/workspaces/${log_analytics_id}"
+              }
+            ],
             "settings": {
-              "title": "ONLYOFFICE Document Server - Production Dashboard"
+              "content": {
+                "Query": "KubePodInventory | where ClusterName contains 'onlyoffice' | summarize count() by PodStatus | render piechart",
+                "PartTitle": "Pod Status Overview"
+              }
+            }
+          }
+        },
+        "1": {
+          "position": {
+            "x": 6,
+            "y": 0,
+            "colSpan": 6,
+            "rowSpan": 4
+          },
+          "metadata": {
+            "type": "Extension/HubsExtension/PartType/MarkdownPart",
+            "inputs": [],
+            "settings": {
+              "content": {
+                "settings": {
+                  "content": "## ONLYOFFICE Document Server\n\nCluster: ${aks_cluster_id}\n\nThis dashboard monitors the ONLYOFFICE Document Server deployment on AKS.",
+                  "title": "ONLYOFFICE Info",
+                  "subtitle": "AKS Deployment"
+                }
+              }
             }
           }
         }

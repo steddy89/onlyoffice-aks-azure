@@ -20,6 +20,8 @@
 # Provider Configuration
 # ------------------------------------------------------------------------------
 provider "azurerm" {
+  skip_provider_registration = true
+  storage_use_azuread        = true
   features {
     key_vault {
       purge_soft_delete_on_destroy    = false
@@ -35,18 +37,12 @@ provider "azuread" {}
 
 provider "helm" {
   kubernetes {
-    host                   = module.aks.kube_config.host
-    client_certificate     = base64decode(module.aks.kube_config.client_certificate)
-    client_key             = base64decode(module.aks.kube_config.client_key)
-    cluster_ca_certificate = base64decode(module.aks.kube_config.cluster_ca_certificate)
+    config_path = "~/.kube/config"
   }
 }
 
 provider "kubernetes" {
-  host                   = module.aks.kube_config.host
-  client_certificate     = base64decode(module.aks.kube_config.client_certificate)
-  client_key             = base64decode(module.aks.kube_config.client_key)
-  cluster_ca_certificate = base64decode(module.aks.kube_config.cluster_ca_certificate)
+  config_path = "~/.kube/config"
 }
 
 # ------------------------------------------------------------------------------
@@ -80,6 +76,20 @@ locals {
 
   suffix        = "${var.project_name}-${var.environment}"
   unique_suffix = substr(md5("${var.project_name}-${var.environment}-${var.location}"), 0, 8)
+}
+
+# ------------------------------------------------------------------------------
+# Log Analytics Workspace (created early to break circular dependency)
+# ------------------------------------------------------------------------------
+resource "azurerm_log_analytics_workspace" "main" {
+  name                = "log-${local.suffix}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  sku                 = "PerGB2018"
+  retention_in_days   = var.log_retention_days
+  daily_quota_gb      = var.environment == "prod" ? -1 : 5
+
+  tags = local.common_tags
 }
 
 # ------------------------------------------------------------------------------
@@ -119,6 +129,8 @@ module "keyvault" {
   subnet_id                = module.networking.private_endpoint_subnet_id
   virtual_network_id       = module.networking.vnet_id
   private_dns_zone_vnet_id = module.networking.vnet_id
+  keyvault_dns_zone_id     = module.networking.keyvault_dns_zone_id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
 
   tags = local.common_tags
 }
@@ -155,7 +167,7 @@ module "aks" {
   kubernetes_version    = var.kubernetes_version
   aks_subnet_id         = module.networking.aks_subnet_id
   appgw_subnet_id       = module.networking.appgw_subnet_id
-  log_analytics_id      = module.monitoring.log_analytics_workspace_id
+  log_analytics_id      = azurerm_log_analytics_workspace.main.id
   acr_id                = module.acr.acr_id
 
   system_node_pool_vm_size  = var.system_node_pool_vm_size
@@ -186,6 +198,7 @@ module "postgresql" {
   postgresql_sku       = var.postgresql_sku
   postgresql_version   = var.postgresql_version
   postgresql_storage_mb = var.postgresql_storage_mb
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
 
   tags = local.common_tags
 }
@@ -243,10 +256,11 @@ module "monitoring" {
   suffix              = local.suffix
   environment         = var.environment
 
-  aks_cluster_id = module.aks.aks_cluster_id
+  log_analytics_workspace_id   = azurerm_log_analytics_workspace.main.id
+  log_analytics_workspace_name = azurerm_log_analytics_workspace.main.name
+  aks_cluster_id               = module.aks.aks_cluster_id
 
   alert_email       = var.alert_email
-  log_retention_days = var.log_retention_days
 
   tags = local.common_tags
 }
@@ -281,6 +295,7 @@ module "onlyoffice" {
   storage_account_name = module.storage.storage_account_name
   storage_account_key  = module.storage.storage_account_key
   storage_share_name   = module.storage.file_share_name
+  resource_group_name  = azurerm_resource_group.main.name
 
   domain_name         = var.domain_name
   tls_secret_name     = var.tls_secret_name

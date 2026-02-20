@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: onlyoffice-data
+  namespace: onlyoffice
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: azurefile-onlyoffice
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: onlyoffice-logs
+  namespace: onlyoffice
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: azurefile-onlyoffice
+  resources:
+    requests:
+      storage: 50Gi

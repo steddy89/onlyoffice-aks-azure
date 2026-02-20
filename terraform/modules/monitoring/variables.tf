@@ -4,11 +4,12 @@ variable "suffix" { type = string }
 variable "environment" { type = string }
 variable "aks_cluster_id" { type = string }
 variable "alert_email" { type = string }
-variable "log_retention_days" { type = number }
+variable "log_analytics_workspace_id" { type = string }
+variable "log_analytics_workspace_name" { type = string }
 variable "tags" { type = map(string) }
 
-output "log_analytics_workspace_id" { value = azurerm_log_analytics_workspace.main.id }
-output "log_analytics_workspace_name" { value = azurerm_log_analytics_workspace.main.name }
+output "log_analytics_workspace_id" { value = var.log_analytics_workspace_id }
+output "log_analytics_workspace_name" { value = var.log_analytics_workspace_name }
 output "app_insights_instrumentation_key" {
   value     = azurerm_application_insights.main.instrumentation_key
   sensitive = true

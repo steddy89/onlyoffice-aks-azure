@@ -16,47 +16,18 @@ resource "azurerm_storage_account" "main" {
   shared_access_key_enabled       = true
   https_traffic_only_enabled      = true
 
-  # Network rules
+  # Network rules - Allow during initial deployment for file share creation
   network_rules {
-    default_action = "Deny"
+    default_action = "Allow"
     bypass         = ["AzureServices"]
-  }
-
-  # Blob soft delete
-  blob_properties {
-    delete_retention_policy {
-      days = 30
-    }
-    container_delete_retention_policy {
-      days = 30
-    }
-    versioning_enabled = true
   }
 
   tags = var.tags
 }
 
-# ---- Azure File Share for ONLYOFFICE data ----
-resource "azurerm_storage_share" "onlyoffice_data" {
-  name                 = "onlyoffice-data"
-  storage_account_name = azurerm_storage_account.main.name
-  quota                = 100
-  enabled_protocol     = "SMB"
-
-  acl {
-    id = "default-acl"
-    access_policy {
-      permissions = "rwdl"
-    }
-  }
-}
-
-resource "azurerm_storage_share" "onlyoffice_logs" {
-  name                 = "onlyoffice-logs"
-  storage_account_name = azurerm_storage_account.main.name
-  quota                = 50
-  enabled_protocol     = "SMB"
-}
+# File shares are dynamically provisioned by AKS CSI driver via PVCs
+# Azure Policy blocks key-based auth, so azurerm_storage_share cannot be used
+# The Azure Files CSI driver uses AKS managed identity for access
 
 # ---- Private Endpoint ----
 resource "azurerm_private_endpoint" "storage" {
@@ -73,11 +44,4 @@ resource "azurerm_private_endpoint" "storage" {
   }
 
   tags = var.tags
-}
-
-# ---- Backup Container for DR ----
-resource "azurerm_storage_container" "backups" {
-  name                  = "backups"
-  storage_account_name  = azurerm_storage_account.main.name
-  container_access_type = "private"
 }

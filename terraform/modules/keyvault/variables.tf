@@ -7,6 +7,8 @@ variable "object_id" { type = string }
 variable "subnet_id" { type = string }
 variable "virtual_network_id" { type = string }
 variable "private_dns_zone_vnet_id" { type = string }
+variable "keyvault_dns_zone_id" { type = string }
+variable "log_analytics_workspace_id" { type = string }
 variable "tags" { type = map(string) }
 
 output "key_vault_id" { value = azurerm_key_vault.main.id }

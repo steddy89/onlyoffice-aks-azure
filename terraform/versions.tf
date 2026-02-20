@@ -35,8 +35,9 @@ terraform {
   # Remote state backend - Azure Blob Storage
   backend "azurerm" {
     resource_group_name  = "rg-terraform-state"
-    storage_account_name = "stterraformstate"
+    storage_account_name = "sttfstate28989"
     container_name       = "tfstate"
     key                  = "onlyoffice-aks.tfstate"
+    use_azuread_auth     = true
   }
 }

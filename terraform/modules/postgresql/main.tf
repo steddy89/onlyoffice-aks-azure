@@ -23,6 +23,8 @@ resource "azurerm_postgresql_flexible_server" "main" {
   administrator_login    = "onlyoffice_admin"
   administrator_password = random_password.postgresql.result
 
+  public_network_access_enabled = false
+
   sku_name   = var.postgresql_sku
   storage_mb = var.postgresql_storage_mb
 
@@ -31,9 +33,12 @@ resource "azurerm_postgresql_flexible_server" "main" {
 
   zone = "1"
 
-  high_availability {
-    mode                      = var.environment == "prod" ? "ZoneRedundant" : "Disabled"
-    standby_availability_zone = var.environment == "prod" ? "2" : null
+  dynamic "high_availability" {
+    for_each = var.environment == "prod" ? [1] : []
+    content {
+      mode                      = "ZoneRedundant"
+      standby_availability_zone = "2"
+    }
   }
 
   maintenance_window {
@@ -49,10 +54,6 @@ resource "azurerm_postgresql_flexible_server" "main" {
   }
 
   tags = var.tags
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 data "azurerm_client_config" "current" {}
@@ -113,8 +114,9 @@ resource "azurerm_key_vault_secret" "postgresql_connection_string" {
 
 # ---- Diagnostic Settings ----
 resource "azurerm_monitor_diagnostic_setting" "postgresql" {
-  name               = "diag-psql-${var.suffix}"
-  target_resource_id = azurerm_postgresql_flexible_server.main.id
+  name                       = "diag-psql-${var.suffix}"
+  target_resource_id         = azurerm_postgresql_flexible_server.main.id
+  log_analytics_workspace_id = var.log_analytics_workspace_id
 
   enabled_log {
     category = "PostgreSQLLogs"

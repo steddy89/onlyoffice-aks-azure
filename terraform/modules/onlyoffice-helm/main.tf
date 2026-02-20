@@ -73,8 +73,10 @@ resource "kubernetes_storage_class" "azure_files" {
   volume_binding_mode = "Immediate"
 
   parameters = {
-    skuName        = "Premium_ZRS"
-    storageAccount = var.storage_account_name
+    skuName          = "Premium_ZRS"
+    storageAccount   = var.storage_account_name
+    resourceGroup    = var.resource_group_name
+    useDataPlaneAPI  = "false"
   }
 
   mount_options = ["dir_mode=0777", "file_mode=0777", "uid=101", "gid=101"]
@@ -121,7 +123,7 @@ resource "kubernetes_persistent_volume_claim" "onlyoffice_logs" {
 resource "helm_release" "onlyoffice" {
   name       = "onlyoffice-docserver"
   namespace  = kubernetes_namespace.onlyoffice.metadata[0].name
-  chart      = "${path.module}/../../../../kubernetes/helm/onlyoffice-docserver"
+  chart      = "${path.module}/../../../kubernetes/helm/onlyoffice-docserver"
 
   timeout = 600
   wait    = true

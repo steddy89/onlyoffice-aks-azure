@@ -31,7 +31,7 @@ resource "azurerm_kubernetes_cluster" "main" {
     os_disk_size_gb     = 128
     os_disk_type        = "Managed"
     type                = "VirtualMachineScaleSets"
-    zones               = ["1", "2", "3"]
+    zones               = ["2", "3"]
     max_pods            = 50
 
     node_labels = {
@@ -116,7 +116,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "onlyoffice" {
   max_count           = var.user_node_pool_max_count
   os_disk_size_gb     = 256
   os_disk_type        = "Managed"
-  zones               = ["1", "2", "3"]
+  zones               = ["2", "3"]
   max_pods            = 30
 
   node_labels = {

@@ -1,24 +1,13 @@
 # ==============================================================================
-# Monitoring Module - Log Analytics, App Insights, Alerts
+# Monitoring Module - App Insights, Alerts, Dashboards
+# Log Analytics Workspace is created in root main.tf and passed in.
 # ==============================================================================
-
-resource "azurerm_log_analytics_workspace" "main" {
-  name                = "log-${var.suffix}"
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  sku                 = "PerGB2018"
-  retention_in_days   = var.log_retention_days
-
-  daily_quota_gb = var.environment == "prod" ? -1 : 5
-
-  tags = var.tags
-}
 
 resource "azurerm_application_insights" "main" {
   name                = "appi-${var.suffix}"
   location            = var.location
   resource_group_name = var.resource_group_name
-  workspace_id        = azurerm_log_analytics_workspace.main.id
+  workspace_id        = var.log_analytics_workspace_id
   application_type    = "web"
 
   tags = var.tags
@@ -29,8 +18,8 @@ resource "azurerm_log_analytics_solution" "containers" {
   solution_name         = "ContainerInsights"
   location              = var.location
   resource_group_name   = var.resource_group_name
-  workspace_resource_id = azurerm_log_analytics_workspace.main.id
-  workspace_name        = azurerm_log_analytics_workspace.main.name
+  workspace_resource_id = var.log_analytics_workspace_id
+  workspace_name        = var.log_analytics_workspace_name
 
   plan {
     publisher = "Microsoft"
@@ -142,7 +131,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "container_restarts" {
   name                = "alert-container-restarts-${var.suffix}"
   resource_group_name = var.resource_group_name
   location            = var.location
-  scopes              = [azurerm_log_analytics_workspace.main.id]
+  scopes              = [var.log_analytics_workspace_id]
   description         = "ONLYOFFICE container restarting frequently"
   severity            = 1
 
@@ -177,7 +166,7 @@ resource "azurerm_portal_dashboard" "onlyoffice" {
   dashboard_properties = templatefile("${path.module}/dashboard.json", {
     subscription_id    = data.azurerm_subscription.current.subscription_id
     resource_group     = var.resource_group_name
-    log_analytics_id   = azurerm_log_analytics_workspace.main.id
+    log_analytics_id   = var.log_analytics_workspace_id
     aks_cluster_id     = var.aks_cluster_id
   })
 

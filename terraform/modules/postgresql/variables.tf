@@ -9,6 +9,7 @@ variable "key_vault_id" { type = string }
 variable "postgresql_sku" { type = string }
 variable "postgresql_version" { type = string }
 variable "postgresql_storage_mb" { type = number }
+variable "log_analytics_workspace_id" { type = string }
 variable "tags" { type = map(string) }
 
 output "fqdn" { value = azurerm_postgresql_flexible_server.main.fqdn }

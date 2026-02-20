@@ -17,7 +17,7 @@ appgw_subnet_prefix     = "10.1.18.0/24"
 private_endpoint_subnet = "10.1.19.0/24"
 
 # AKS - smaller for dev
-kubernetes_version       = "1.29"
+kubernetes_version       = "1.33"
 system_node_pool_vm_size = "Standard_D2s_v5"
 system_node_pool_count   = 1
 user_node_pool_vm_size   = "Standard_D4s_v5"
